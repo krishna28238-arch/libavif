@@ -178,9 +178,12 @@ avifResult avifSampleTransformExpressionToRecipe(const avifSampleTransformExpres
     for (size_t i = 0; i < sizeof(kAllRecipes) / sizeof(kAllRecipes[0]); ++i) {
         avifSampleTransformRecipe candidateRecipe = kAllRecipes[i];
         avifSampleTransformExpression candidateExpression = { 0 };
-        AVIF_CHECKRES(avifSampleTransformRecipeToExpression(candidateRecipe, &candidateExpression));
-        const avifBool equivalence = avifSampleTransformExpressionIsEquivalentTo(expression, &candidateExpression);
+        const avifResult recipeResult = avifSampleTransformRecipeToExpression(candidateRecipe, &candidateExpression);
+        const avifBool equivalence = (recipeResult == AVIF_RESULT_OK) &&
+                                     avifSampleTransformExpressionIsEquivalentTo(expression, &candidateExpression);
+        // Frees the candidate expression, including any partially-built one if recipeResult is an error.
         avifArrayDestroy(&candidateExpression);
+        AVIF_CHECKRES(recipeResult);
         if (equivalence) {
             *recipe = candidateRecipe;
             return AVIF_RESULT_OK;
@@ -399,7 +402,11 @@ avifResult avifImageApplyOperations(avifImage * dstImage,
     AVIF_CHECKERR(avifArrayCreate(&expression, sizeof(avifSampleTransformToken), numTokens), AVIF_RESULT_OUT_OF_MEMORY);
     for (uint32_t t = 0; t < numTokens; ++t) {
         avifSampleTransformToken * token = (avifSampleTransformToken *)avifArrayPush(&expression);
-        AVIF_ASSERT_OR_RETURN(token != NULL);
+        if (token == NULL) {
+            // Free the tokens copied so far.
+            avifArrayDestroy(&expression);
+            return AVIF_RESULT_OUT_OF_MEMORY;
+        }
         *token = tokens[t];
     }
     const avifResult result = avifImageApplyExpression(dstImage, bitDepth, &expression, numInputImageItems, inputImageItems, planes);

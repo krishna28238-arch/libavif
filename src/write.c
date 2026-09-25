@@ -1132,8 +1132,11 @@ static avifResult avifEncoderWriteSampleTransformPayload(avifEncoder * encoder, 
     AVIF_CHECKRES(avifRWStreamWriteBits(&s, AVIF_SAMPLE_TRANSFORM_BIT_DEPTH_32, /*bitCount=*/2)); // unsigned int(2) bit_depth;
 
     avifSampleTransformExpression expression = { 0 };
-    AVIF_CHECKRES(avifSampleTransformRecipeToExpression(encoder->sampleTransformRecipe, &expression));
-    const avifResult result = avifEncoderWriteSampleTransformTokens(&s, &expression);
+    avifResult result = avifSampleTransformRecipeToExpression(encoder->sampleTransformRecipe, &expression);
+    if (result == AVIF_RESULT_OK) {
+        result = avifEncoderWriteSampleTransformTokens(&s, &expression);
+    }
+    // Frees the expression, including any partially-built one if the recipe conversion failed.
     avifArrayDestroy(&expression);
     if (result != AVIF_RESULT_OK) {
         avifDiagnosticsPrintf(&encoder->diag, "Failed to write sample transform metadata for recipe %d", (int)encoder->sampleTransformRecipe);
